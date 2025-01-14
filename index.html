@@ -1,0 +1,145 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Keyboard Backlight Control</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            max-width: 800px;
+            margin: 2rem auto;
+            padding: 0 1rem;
+            background-color: #f5f5f5;
+        }
+        h1 {
+            color: #333;
+            text-align: center;
+        }
+        .control-panel {
+            background: white;
+            padding: 2rem;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        button {
+            background-color: #007bff;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 4px;
+            cursor: pointer;
+            margin: 10px 0;
+        }
+        button:hover {
+            background-color: #0056b3;
+        }
+        .brightness-control {
+            margin: 20px 0;
+        }
+        #brightnessSlider {
+            width: 100%;
+            margin: 10px 0;
+        }
+        #log {
+            background: #333;
+            color: #fff;
+            padding: 1rem;
+            border-radius: 4px;
+            margin-top: 20px;
+            height: 200px;
+            overflow-y: auto;
+            font-family: monospace;
+        }
+        .status {
+            color: #666;
+            text-align: center;
+            margin: 10px 0;
+        }
+    </style>
+</head>
+<body>
+    <h1>Keyboard Backlight Control</h1>
+    <div class="control-panel">
+        <button id="requestDeviceButton">Connect Keyboard</button>
+        <div class="brightness-control">
+            <label for="brightnessSlider">Brightness: <span id="brightnessValue">0</span></label>
+            <input type="range" id="brightnessSlider" min="0" max="512" value="0">
+        </div>
+        <div class="status" id="status">No device connected</div>
+    </div>
+    <div id="log"></div>
+
+    <script>
+        const log = document.getElementById('log');
+        const status = document.getElementById('status');
+        const requestDeviceButton = document.getElementById('requestDeviceButton');
+        const brightnessSlider = document.getElementById('brightnessSlider');
+        const brightnessValue = document.getElementById('brightnessValue');
+        let device = null;
+
+        console.log = text => {
+            const time = new Date().toLocaleTimeString();
+            log.innerHTML += `[${time}] ${text}<br>`;
+            log.scrollTop = log.scrollHeight;
+        };
+
+        if (!("hid" in navigator)) {
+            console.log("⚠️ WebHID is not available in your browser.");
+        }
+
+        navigator.hid.getDevices().then(devices => {
+            if (devices.length > 0) {
+                device = devices[0];
+                console.log(`✅ Found previously connected device: "${device.productName}"`);
+                openDevice();
+            }
+        });
+
+        async function openDevice() {
+            if (!device) return;
+            try {
+                await device.open();
+                console.log(`🔓 Device connected and ready`);
+                status.textContent = `Connected to ${device.productName}`;
+                brightnessSlider.disabled = false;
+            } catch (error) {
+                console.log(`❌ Error opening device: ${error}`);
+                device = null;
+                brightnessSlider.disabled = true;
+                status.textContent = "No device connected";
+            }
+        }
+
+        requestDeviceButton.onclick = async () => {
+            try {
+                const devices = await navigator.hid.requestDevice({
+                    filters: [{ vendorId: 0x05ac, usage: 0x0f, usagePage: 0xff00 }]
+                });
+                if (devices.length === 0) return;
+                device = devices[0];
+                console.log(`✅ Selected device: "${device.productName}"`);
+                await openDevice();
+            } catch (error) {
+                console.log(`❌ Error: ${error}`);
+                device = null;
+                brightnessSlider.disabled = true;
+                status.textContent = "No device connected";
+            }
+        };
+
+        brightnessSlider.oninput = async event => {
+            if (!device) return;
+            const brightness = parseInt(event.target.value);
+            brightnessValue.textContent = brightness;
+            try {
+                await device.sendFeatureReport(1, Uint32Array.from([brightness, 0]));
+            } catch (error) {
+                console.log(`❌ Error setting brightness: ${error}`);
+            }
+        };
+
+        // Initial setup
+        brightnessSlider.disabled = true;
+    </script>
+</body>
+</html>
